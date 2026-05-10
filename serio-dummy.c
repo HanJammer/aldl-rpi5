@@ -22,6 +22,8 @@
 /****************GLOBALSn'STRUCTURES*****************************/
 
 unsigned char *databuff;
+byte lastwrite[5];
+int lastwrite_len;
 char txmode;
 
 void gen_pkt(int len);
@@ -39,8 +41,8 @@ void gen_pkt(int len) {
   int x;
   if(len < 4) return;
   if(len > ALDL_COMMBUFFER) len = ALDL_COMMBUFFER;
-  databuff[0]=0xF4;
-  databuff[1]=0x92;
+  databuff[0]=(lastwrite_len > 0) ? lastwrite[0] : 0xF4;
+  databuff[1]=calc_msglength(len);
   databuff[2]=0x01;
   for(x=3;x<len-1;x++) databuff[x] = ( (byte)rand() % 256 ) - 1;
   databuff[len-1] = checksum_generate(databuff,len-1);
@@ -62,6 +64,8 @@ int serial_init(char *port) {
   printf("Serial dummy driver initialized!\n");
   #endif
   txmode=0;
+  lastwrite_len=0;
+  memset(lastwrite,0,sizeof(lastwrite));
   databuff=malloc(ALDL_COMMBUFFER);
   return 1;
 }
@@ -92,10 +96,14 @@ int serial_write(byte *str, int len) {
   printf("WRITE: ");
   printhexstring(str,len); 
   #endif
+  if(len > 5) len = 5;
+  memcpy(lastwrite,str,len);
+  lastwrite_len=len;
   /* determine mode */
-  if(len == 4 && str[0] == 0xF4 && str[1] == 0x56 && \
-     str[2] == 0x08 && str[3] == 0xAE) {
+  if(len == 4 && str[2] == 0x08) {
      txmode = 1;
+  } else if(len == 5 && str[2] == 0x01) {
+     txmode = 2;
   }
   return 0;
 }
@@ -112,29 +120,24 @@ inline int serial_read(byte *str, int len) {
     return 1;
   } if(txmode == 1) { /* shutup req */
     usleep(SERIAL_BYTES_PER_MS * 5 * 1000); /* fake baud delay */
-    str[0] = 0xF4;
-    str[1] = 0x56;
-    str[2] = 0x08;
-    str[3] = 0xAE;
+    if(lastwrite_len > len) return 0;
+    memcpy(str,lastwrite,lastwrite_len);
     txmode++;
     #ifdef SERIAL_VERBOSE
     printf("DUMMY MODE: Silence Request: ");
-    printhexstring(str,4);
+    printhexstring(str,lastwrite_len);
     #endif
-    return 4;
+    return lastwrite_len;
   } if(txmode == 2) { /* data request reply */
     usleep(SERIAL_BYTES_PER_MS * 5 * 1000); /* fake baud delay */
+    if(lastwrite_len > len) return 0;
+    memcpy(str,lastwrite,lastwrite_len);
     txmode = 3; 
-    str[0] = 0xF4;
-    str[1] = 0x57;
-    str[2] = 0x01;
-    str[3] = 0x00;
-    str[4] = 0xB4;
     #ifdef SERIAL_VERBOSE
     printf("DUMMY MODE: Data Req. Reply: ");
-    printhexstring(str,5);
+    printhexstring(str,lastwrite_len);
     #endif
-    return 5;
+    return lastwrite_len;
   } if(txmode == 3) { /* data send */
     usleep(SERIAL_BYTES_PER_MS * len * 1000); /* fake baud delay */
     txmode = 2;
