@@ -1,19 +1,24 @@
 # compiler flags
-CFLAGS= -g -Wall
+CFLAGS= -O2 -Wall
+
+.PHONY: clean install stats
 
 all: aldl-analyzer
 
-aldl-analyzer: analyzer.c csv.o error.o loadconfig.o config.h
-	gcc $(CFLAGS) -o aldl-analyzer analyzer.c csv.o loadconfig.o error.o
+aldl-analyzer: analyzer.c csv.o loadconfig.o config.h useful.o
+	gcc $(CFLAGS) -o aldl-analyzer analyzer.c csv.o loadconfig.o useful.o
 
-csv.o: csv.c csv.h config.h
-	gcc $(CFLAGS) -c csv.c
-
-error.o: error.c error.h config.h
+error: error.c error.h
 	gcc $(CFLAGS) -c error.c
+
+csv.o: csv.c csv.h config.h useful.h
+	gcc $(CFLAGS) -c csv.c
 
 loadconfig.o: loadconfig.c loadconfig.h config.h
 	gcc $(CFLAGS) -c loadconfig.c
+
+useful.o: useful.c useful.h
+	gcc $(CFLAGS) -c useful.c
 
 install: aldl-analyzer analyzer.conf
 	cp -nv analyzer.conf /etc/aldl/analyzer.conf

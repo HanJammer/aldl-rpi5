@@ -1,2 +1,10 @@
+#ifndef _ERROR_H
+#define _ERROR_H
 
-void err(char *str, ...);
+/************ SCOPE *********************************
+  Error handling routines.
+****************************************************/
+
+void error(char *str, ...);
+
+#endif

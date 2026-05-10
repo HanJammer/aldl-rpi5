@@ -4,6 +4,12 @@ this is a program designed to manage aldl datastreams from the 8192 baud series
 of OBD-I GM ECMs under gnu/linux based operating systems, but best tested with
 EE mask LT1 ecms.
 
+it also provides a data analysis program to assist in using massive amounts of
+collected data for tuning.
+
+see http://fbodytech.com/ for a more detailed installation tutorial, including
+some raspberry pi based instructions.
+
 ## goals
 
 * adaptable to any ecm that adheres to the standard 8192 baud aldl protocol
@@ -17,31 +23,42 @@ EE mask LT1 ecms.
 * fast and easy automatic datalogging to csv format
 * simple ncurses interface for raspberry pi based dashboard
 
+## status
+
+the system is in daily real-world use on a test vehicle, performing full time
+datalogging and display.  the goals above have all been met, and now optimization
+and testing on other ecm platforms is required.
+
+an averaging datalog analyzer is included to make logical use of massive amounts
+of log data to do timing and AFR adjustments, but it may only be useful on an
+LT1...
+
 ## instructions
 
-to build and run it, you'll need to:
+if you're running a debian-like system, you can try to run:
+
+./debian-config.sh
+
+then, make && sudo make install
+
+that might do it.  for non-debian systems, to build and run it, you'll need to:
 
 * install libftdi and libncurses.
+* build the software
 
-if you run debian/ubuntu/whatever, then: apt-get install ncurses-dev libftdi-dev
+check out config.h before compile if you're interested in 'tweaking' anything.
 
-* 'rmmod ftdi_sio'  or blacklist it.
+then:
+
+make
+sudo make install
+
+* 'rmmod ftdi_sio' or, or better yet, blacklist it somehow.
 
 this removes the the in-kernel ftdi driver.  this program uses libftdi for raw
 access to the usb-serial adaptor, and will not work while ftdi_sio is loaded.
 
-there is a script in extras/ that might help with debian-like systems
-
 * make sure your user has permissions to read/write usb devices.
-
-* configuration.  see below.
-
-* run it! './aldl-ftdi'
-
-by default, it only uses the ncurses display interface. the default modules
-that run are also specified in aldl.conf.
-
-if you want the datalogger and the display interface: ./aldl-ftdi datalogger
 
 ## configuration
 
@@ -55,82 +72,31 @@ files, as well as configures the serial driver, and a few timing options.
 * datalogger.conf: configures the datalogger, including location and naming or
 the logs themselves
 
-the only thing you should have to change to get this program up and running on
-an LT1 is identifying your ftdi device somehow in aldl.conf.
+the only thing you MIGHT have to change to get this program up and running on
+an LT1 is identifying your ftdi device somehow in aldl.conf.  you should try
+just running it first, it might work, the default covers MOST ftdi chipsets!
 
-there are instructions at the bottom of this file on various ways to do that.
-but briefly, if you run lsusb, and you find your device, it'll be like:
+if not, using lsusb, you can find your ftdi device:
 
 Bus 001 Device 003: ID 0424:ec00 Some FTDI Device
 
-there is also a command, 'aldl-ftdi devices' which may give you more detailed
-information about the ftdi devices on your system, or may not.  poorly tested.
+then look in aldl.conf. there's a PORT= line, just throw 0x in front of it,
+it will search for that usb device id, and you're good to go.
 
-then look in aldl.conf. there's a PORT= line. for this example, use one of the
-following PORT strings:
+PORT=i:0x424:0xEC00
 
-PORT=i:0x424:0xEC00 (preferred)
-PORT=D:001/003
+## running it
 
-check out config.h before compile if you're interested in 'tweaking' anything.
+aldl-dummy
 
-## contents
+that runs a test program that requires no actual vehicle, and fakes an LT1
+ecm so you can check out how it behaves.
 
-acquire.c:
-  This object contains one event loop, that drives
-  the data aquisition thread.  Maintaining connection
-  statefulness and retrieving all data is done here.
+otherwise,
 
-aldlcomm.c:
-  Most ALDL communications protocol functions are
-  contained in this object.  Serial handlers that
-  are not interface-specific are also contained here.
-  No actual parsing of request replies are here,
-  see aldldata.c.
+aldl-ftdi
 
-aldldata.c:
-  This object contains all of the functions used for
-  structuring and parsing the ALDL data structures,
-  including locking and serializing of record retr.
+you dont need to connect your usb cable, or start your car right away, it'll
+sit around and wait till you do.
 
-error.c:
-  Error handing routines.
-
-loadconfig.c:
-  This object contains configuration file loading
-  routines, all based around two symbols, the equals
-  sign and the double quote.
-
-main.c:
-  Initialize everything, and spawn all threads.
-
-serio-dummy.c:
-  A dummy serial handler object that pretends to be
-  a fake LT1 (EE) ECM and just send random garbage
-  (00-FF) as a datastream.
-
-serio-ftdi.c:
-  Primary serial driver, uses libftdi for raw usb
-  access to ftdi serial adaptors.  Reccommended.
-
-useful.c:
-  Useful but generic functions.
-
-aldl-io.h:
-  Include this file.  All useful functions are
-  declared here.
-
-aldl-types.h:
-  All structure formats and enumerations that are
-  useful are contained in this file.
-
-config.h:
-  Static #define's that apply to the entire program.
-
-modules/*: various output modules which can be executed by main.c to actually
-           do stuff with the data, incl. display and logging.
-
-analyzer/*: a c-based offline log analyzer that parses groups of logs for blm
-            cell trims, knock counts, wideband afr, etc. using thresholds to
-            try to avoid bad data.
-
+enjoy!

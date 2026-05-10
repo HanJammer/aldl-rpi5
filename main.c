@@ -14,8 +14,7 @@
 #include "aldl-io.h"
 #include "useful.h"
 #include "serio.h"
-
-#include "modules/modules.h"
+#include "modules.h"
 
 /************ SCOPE *********************************
   Initialize everything, and spawn all threads.
@@ -27,8 +26,8 @@ typedef struct _aldl_threads_t {
   pthread_t acq;
   pthread_t consoleif;
   pthread_t datalogger;
-  pthread_t dataserver;
   pthread_t remote;
+  pthread_t mode4;
 } aldl_threads_t;
 
 /* ------ local functions ------------- */
@@ -79,56 +78,59 @@ int main(int argc, char **argv) {
 void parse_cmdline(int argc, char **argv, aldl_conf_t *aldl) {
   int n_arg = 0;
   for(n_arg=1;n_arg<argc;n_arg++) {
-    if(faststrcmp(argv[n_arg],"configtest") == 1) {
+    if(rf_strcmp(argv[n_arg],"configtest") == 1) {
       printf("Loaded config OK.  Exiting...\n");
       exit(0);
-    } else if(faststrcmp(argv[n_arg],"devices") == 1) {
+    } else if(rf_strcmp(argv[n_arg],"devices") == 1) {
       serial_help_devs();
       exit(0);
-    } else if(faststrcmp(argv[n_arg],"consoleif") == 1) {
+    } else if(rf_strcmp(argv[n_arg],"mode4") == 1) {
+      aldl->mode4_enable = 1;
+    } else if(rf_strcmp(argv[n_arg],"consoleif") == 1) {
       aldl->consoleif_enable = 1;
-    } else if(faststrcmp(argv[n_arg],"datalogger") == 1) {
+    } else if(rf_strcmp(argv[n_arg],"datalogger") == 1) {
       aldl->datalogger_enable = 1;
-    } else if(faststrcmp(argv[n_arg],"dataserver") == 1) {
-      aldl->dataserver_enable = 1;
-    } else if(faststrcmp(argv[n_arg],"remote") == 1) {
+    } else if(rf_strcmp(argv[n_arg],"remote") == 1) {
       aldl->remote_enable = 1;
     } else {
-      fatalerror(ERROR_NULL,"Option %s not recognized",argv[n_arg]);
-    };
-  };
+      error(1,ERROR_NULL,"Option %s not recognized",argv[n_arg]);
+    }
+  }
 }
 
 void modules_verify(aldl_conf_t *aldl) {
   /* compatibility checking */
   /* dont specify remote here, as remote by itself isn't enough ... */
   if(aldl->consoleif_enable == 0 &&
-     aldl->datalogger_enable == 0 &&
-     aldl->dataserver_enable == 0) {
-    fatalerror(ERROR_PLUGIN,"no plugins are enabled");
-  };
+     aldl->datalogger_enable == 0) {
+    error(1,ERROR_PLUGIN,"no plugins are enabled");
+  }
 }
 
 void modules_start(aldl_threads_t *thread, aldl_conf_t *aldl) {
-  if(aldl->consoleif_enable == 1) {
-    pthread_create(&thread->consoleif,NULL,
-                   consoleif_init,(void *) aldl);
-  };
+  if(aldl->mode4_enable == 1) {
+    pthread_create(&thread->mode4,NULL,
+              mode4_init,(void *) aldl);
+    if(aldl->datalogger_enable == 1) { /* allow datalogger ... */
+             pthread_create(&thread->datalogger,NULL,
+                     datalogger_init,(void *) aldl);
+    }
+  } else {
+    if(aldl->consoleif_enable == 1) {
+      pthread_create(&thread->consoleif,NULL,
+                     consoleif_init,(void *) aldl);
+    }
 
-  if(aldl->datalogger_enable == 1) {
-    pthread_create(&thread->datalogger,NULL,
-                   datalogger_init,(void *) aldl);
-  };
+    if(aldl->datalogger_enable == 1) {
+      pthread_create(&thread->datalogger,NULL,
+                     datalogger_init,(void *) aldl);
+    }
 
-  if(aldl->dataserver_enable == 1) {
-    pthread_create(&thread->dataserver,NULL,
-                    dataserver_init,(void *) aldl);
-  };
-
-  if(aldl->remote_enable == 1) {
-    pthread_create(&thread->remote,NULL,
-                    remote_init,(void *) aldl);
-  };
+    if(aldl->remote_enable == 1) {
+      pthread_create(&thread->remote,NULL,
+                      remote_init,(void *) aldl);
+    }
+  }
 }
 
 void acq_start(aldl_threads_t *thread, aldl_conf_t *aldl) {
@@ -157,26 +159,24 @@ int aldl_finish() {
 }
 
 void aldl_sanity_check(aldl_conf_t *aldl) {
-  int x;
-  aldl_define_t *def;
-  aldl_packetdef_t *pkt;
-  int id = 0;
+  /* if we require more records to start than available ... */
+  if(aldl->bufstart > aldl->bufsize) {
+    error(1,ERROR_RANGE,"Buffer size is smaller than buffer start");
+  }
 
-  /* find related pkt number */
-  for(x=0;x<aldl->n_defs;x++) {
-    def = &aldl->def[x];
-    pkt = NULL;
-    for(id=0; id < aldl->comm->n_packets; id++) {
-      if(aldl->comm->packet[id].id == def->packet) {
-        pkt = &aldl->comm->packet[id]; 
-        break;
-      };
-    };
-    if(pkt == NULL) fatalerror(ERROR_RANGE,"invalid packet specified");
-
-    /* check range */
-    if(pkt->offset + def->offset > pkt->length) {
-      fatalerror(ERROR_RANGE,"definition out of packet range");
-    };
-  };
-};
+  /* check for packet out of range */
+  int x,y;
+  aldl_packetdef_t *p;
+  for(x=0; x<aldl->n_defs; x++) {
+    y = aldl->def[x].packet;
+    if(y > aldl->comm->n_packets || y < 0) {
+      error(1,ERROR_CONFIG,"Definition for %s belongs to bad packet %i",
+            aldl->def[x].name,aldl->def[x].packet); 
+    }
+    p = &aldl->comm->packet[y];
+    if(aldl->def[x].offset > p->length - p->offset) {
+      error(1,ERROR_CONFIG,"Definition for %s has offset out of range",
+            aldl->def[x].name);
+    }
+  }
+}

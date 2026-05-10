@@ -1,7 +1,5 @@
 #define MAX_PARAMETERS 65535
 
-int faststrcmp(char *a, char *b);
-
 /* a struture with array index matched parameters and values from a cfg file */
 typedef struct _dfile_t {
   unsigned int n; /* number of parameters */
@@ -11,9 +9,6 @@ typedef struct _dfile_t {
 
 /* loads file, strips quotes, shrinks, parses in one step.. */
 dfile_t *dfile_load(char *filename);
-
-/* read file into memory */
-char *load_file(char *filename);
 
 /* split up data into parameters and values */
 dfile_t *dfile(char *data);

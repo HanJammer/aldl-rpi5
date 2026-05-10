@@ -1,21 +1,26 @@
 #include <stdio.h>
-#include <string.h>
 #include <stdarg.h>
-#include <malloc.h>
 #include <stdlib.h>
 #include <unistd.h>
-
+#include <string.h>
 #include "config.h"
+#include "error.h"
 
-void err(char *str, ...) {
+/************ SCOPE *********************************
+  Error handing routines.
+****************************************************/
+
+void error(char *str, ...) {
   va_list arg;
+  fprintf(stderr,"ALDL-ANALYZER: ");
   if(str != NULL) {
     fprintf(stderr,"ERROR: ");
     va_start(arg,str);
     vfprintf(stderr,str,arg);
     va_end(arg);
     fprintf(stderr,"\n");
-  };
-  exit(1);
-};
+  }
+}
+
+#endif
 

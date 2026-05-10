@@ -10,6 +10,7 @@
 #include "config.h"
 #include "aldl-io.h"
 #include "useful.h"
+#include "aldlcomm.h"
 
 /************ SCOPE *********************************
   Most ALDL communications protocol functions are
@@ -31,23 +32,6 @@ int aldl_waitforchatter(); /* waits forever for a byte, then bails */
 
 int aldl_timeout(int len); /* figure out a timeout period */
 
-/* sends a request, delays for a calculated time, and waits for an echo.  if
-   the request is successful, returns 1, otherwise 0. */
-int aldl_request(byte *pkt, int len);
-
-/* read the number of bytes specified, into str.  waits until the correct
-   number of bytes were read, and returns 1, or the timeout (in ms)
-   has expired, and returns 0. */
-inline int read_bytes(byte *str, int bytes, int timeout);
-
-/* the same as serial_read_bytes, but discards the bytes.  useful for
-   ignoring a known-length string of bytes. */
-inline int skip_bytes(int bytes, int timeout);
-
-/* look for str in the serial stream up to a length of max, or a time of
-   timeout. */
-int listen_bytes(byte *str, int len, int max, int timeout);
-
 /************ FUNCTIONS **********************/
 
 int aldl_reconnect(aldl_commdef_t *c) {
@@ -56,15 +40,16 @@ int aldl_reconnect(aldl_commdef_t *c) {
   #endif
   /* wait forever.  bail some other way if you want to stop waiting. */
   while(1) {
-    /* send a 'return to normal mode' command first ... */
-    serial_write(c->returncommand,4);
+    /* send a 'return to normal mode' command first, but don't bother
+       unless the ecm has idle traffic ... */
+    if(aldl_shutup(c) == 1) serial_write(c->returncommand,4);
     msleep(50);
     serial_purge();
     if(c->chatterwait == 1) {
       aldl_waitforchatter(c);
     } else {
       msleep(c->idledelay);
-    };
+    }
     if(aldl_shutup(c) == 1) {
       /* a delay here seems necessary ... */
       msleep(50);
@@ -73,8 +58,8 @@ int aldl_reconnect(aldl_commdef_t *c) {
     } else { /* shutup request failed */
       msleep(50);
       serial_purge();
-    };
-  };
+    }
+  }
   return 0;
 }
 
@@ -95,7 +80,7 @@ int aldl_waitforchatter(aldl_commdef_t *c) {
     giveupcount++;
     if(giveupcount > GIVEUPWAITING) exit(0);
     #endif
-  };
+  }
   #ifdef ALDL_VERBOSE
     printf("got idle chatter or something.\n");
   #endif
@@ -169,11 +154,12 @@ inline int skip_bytes(int bytes, int timeout) {
   if(bytes > ALDL_COMMBUFFER) {
     /* realloc just to save ourselves */
     commbuf = realloc(commbuf,sizeof(byte) * bytes);
+    if(commbuf == NULL) error(1,ERROR_MEMORY,"Out of memory @ realloc");
     #ifdef DEBUGMEM
-    nonfatalerror(ERROR_MEMORY,"skip_bytes %i required emergency realloc\n",
+    error(0,ERROR_MEMORY,"skip_bytes %i required emergency realloc\n",
                                 bytes);
     #endif
-  };
+  }
   /* read into commbuf and then forget about it */
   int bytes_read = read_bytes(commbuf,bytes,timeout);
   #ifdef SERIAL_VERBOSE
@@ -186,11 +172,12 @@ int listen_bytes(byte *str, int len, int max, int timeout) {
   if(max > ALDL_COMMBUFFER) {
     /* realloc just to save ourselves */
     commbuf = realloc(commbuf,sizeof(byte) * max);
+    if(commbuf == NULL) error(1,ERROR_MEMORY,"Out of memory @ realloc");
     #ifdef DEBUGMEM
-    nonfatalerror(ERROR_MEMORY,"skip_bytes %i required emergency realloc\n",
-                                bytes);
+    error(0,ERROR_MEMORY,"skip_bytes %i required emergency realloc\n",
+                                max);
     #endif
-  };
+  }
   int chars_read = 0; /* total chars read into buffer */
   int chars_in = 0; /* chars added to buffer */
   timespec_t timestamp = get_time(); /* timestamp beginning of op */
@@ -204,8 +191,8 @@ int listen_bytes(byte *str, int len, int max, int timeout) {
       chars_read += chars_in; /* mv cursor */
       if(cmp_bytestring(commbuf,chars_read,str,len) == 1) {
         return 1;
-      };
-    };
+      }
+    }
     /* timeout and throttling routine */
     #ifndef AGGRESSIVE
     usleep(SLEEPYTIME); /* timing delay */
@@ -216,9 +203,9 @@ int listen_bytes(byte *str, int len, int max, int timeout) {
         printf("LISTEN TIMEOUT\n");
         #endif
         return 0;
-      };
-    };
-  };
+      }
+    }
+  }
   #ifdef SERIAL_VERBOSE
   printf("STRING NOT FOUND, GOT: ");
   printhexstring(commbuf,chars_read);
@@ -237,7 +224,7 @@ byte *generate_request(byte mode, byte message, aldl_commdef_t *comm) {
   command[1] = calc_msglength(5); 
   command[2] = mode;
   command[3] = message;
-  command[4] = checksum_generate(command,5-1);
+  command[4] = checksum_generate(command,4); /* 4=msglen */
   return command;
 }
 
@@ -246,10 +233,10 @@ byte *generate_mode(byte mode, aldl_commdef_t *comm) {
   tmp[0] = comm->pcm_address;
   tmp[1] = calc_msglength(4);
   tmp[2] = mode;
-  tmp[3] = checksum_generate(tmp,4-1);
+  tmp[3] = checksum_generate(tmp,3); /* 3=msglen */
   return tmp;
-};
+}
 
 void alloc_commbuf() {
   commbuf = smalloc(sizeof(byte) * ALDL_COMMBUFFER);
-};
+}

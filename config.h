@@ -1,20 +1,26 @@
-#define VERSION "ALDL-IO v0.8b"
+#define VERSION "ALDL-IO 1.6a"
 
 /************ SCOPE *********************************
   Static #define's that apply to the entire program.
 ****************************************************/
 
+/* ----------- NOTES ----------------------------------*/
+
+/* An effort has been made to keep nearly all static configuration in this
+   file, however there are some exceptions, see useful.h for some other
+   constants and defines... */
+
 /* ----------- FILE CONFIG ----------------------------*/
 
 /* path to the root config file */
+/* TODO need to make an override on command line option in main.c */
 #define ROOT_CONFIG_FILE "/etc/aldl/aldl.conf"
 
-/* this compacts the configuration data after parsing it.  there should be no
-   reason to undefine it, unless initial load speed is more important than
-   memory use. */
-#define REDUCE_CONFIG_MEMORY
-
 /* ----------- DEBUG OUTPUT --------------------------*/
+
+/* the debug master switch, enables all available debugging and verbosity
+   routines.  or, undef this and set individual options below... */
+#undef DEBUGMASTER
 
 /* enable some checks for retarded values being passed to things */
 #undef RETARDED
@@ -25,9 +31,6 @@
 /* debug structural functions, such as record link list management */
 #undef DEBUGSTRUCT
 
-/* debug configuration file loading */
-#undef DEBUGCONFIG
-
 /* print debugging info for memory */
 #undef DEBUGMEM
 
@@ -35,18 +38,28 @@
 #undef SERIAL_VERBOSE
 #undef SERIAL_SUPERVERBOSE
 
+/* all errors are fatal error conditions */
+#undef ALL_ERRORS_FATAL
+
 /* verbose aldl protocol level comms on stdout */
 #undef ALDL_VERBOSE
 
 /* verbose networking */
 #define NET_VERBOSE
 
-/* --------- GLOBAL FEATURE CONFIG -----------------*/
+#ifdef DEBUGMASTER
+  #define NET_VERBOSE
+  #define ALDL_VERBOSE
+  #define SERIAL_VERBOSE
+  #define SERIAL_SUPERVERBOSE
+  #define DEBUGMEM
+  #define ALL_ERRORS_FATAL
+  #define RETARDED
+  #define VERBLOSITY
+  #define DEBUGSTRUCT
+#endif
 
-/* support multiple packets, required by some definition files,
-   undefining this avoids a small amount of overhead and works
-   for most ECMs */
-#undef ALDL_MULTIPACKET
+/* --------- GLOBAL FEATURE CONFIG -----------------*/
 
 /* maximum size of listen/skip buffer.   if a listen or skip attempt is larger
    than this value, an emergency realloc is done, which is a waste of time, but
@@ -118,6 +131,12 @@
    system; so the check should not be necessary ... and results are undefined */
 #define TIMESTAMP_WRAPAROUND
 
+/* when sending auxiliary commands such as EE MODE4 stuff, send the message
+   three times instead of one to help ensure success.  there's no real way to
+   tell if the command succeeded, so this is probably a good idea?
+   if commands are cumulative this is obviously broken, though. */
+#define AUXCOMMAND_RETRY
+
 /* ------- FTDI DRIVER CONFIG ------------------------*/
 
 /* the baud rate to set for the ftdi usb userland driver.  reccommend 8192. */
@@ -155,5 +174,14 @@
    unique identifier names. */
 #define CONFIG_BAD_CHARS "(),\"'"
 
+
+/* ------- DISPLAY CONFIG ---------------------------*/
+
 /* use units of measure in consoleif */
 #undef CONSOLEIF_UOM
+
+/* the char used for ncurses progress bar stuff */
+#define CONSOLEIF_BAR_CHAR '*'
+
+/* print hex M4 string */
+#define M4_PRINT_HEX

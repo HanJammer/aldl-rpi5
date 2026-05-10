@@ -8,28 +8,29 @@
 #include "config.h"
 #include "error.h"
 #include "loadconfig.h"
+#include "useful.h"
+
+/* This is a stripped down and portable version of ../loadconfig.c,
+   it may be a bit further behind, though. */
 
 /* -- LOCAL FUNCTIONS -- */
 
 /* is a char whitespace ...? */
 inline int is_whitespace(char ch);
 
-/* copy data contained in field f of d to dst, delimted by start and end */
-char *brk_field(char *dst, int f, char *in);
-
 char *dconfig(char *buf, char *parameter, int n);
 
 char *configopt_fatal(dfile_t *config, char *str) {
   char *val = configopt(config,str,NULL);
-  if(val == NULL) err("Missing config option: %s",str);
+  if(val == NULL) error("Missing config option: %s",str);
   return val;
-};
+}
 
 char *configopt(dfile_t *config,char *str,char *def) {
   char *val = value_by_parameter(str, config);
   if(val == NULL) return def;
   return val;
-};
+}
 
 float configopt_float(dfile_t *config, char *str, float def) {
   char *in = configopt(config,str,NULL);
@@ -37,18 +38,18 @@ float configopt_float(dfile_t *config, char *str, float def) {
   if(in == NULL) {
     printf("caught default value for %s: %f\n",str,def);
     return def;
-  };
+  }
   #else
   if(in == NULL) return def;
   #endif
   float x = atof(in);
   return x;
-};
+}
 
 float configopt_float_fatal(dfile_t *config,char *str) {
   float x = atof(configopt_fatal(config,str));
   return x;
-};
+}
 
 int configopt_int(dfile_t *config,char *str, int min, int max, int def) {
   char *in = configopt(config,str,NULL);
@@ -56,39 +57,37 @@ int configopt_int(dfile_t *config,char *str, int min, int max, int def) {
   if(in == NULL) {
     printf("caught default value for %s: %i\n",str,def);
     return def;
-  };
+  }
   #else
   if(in == NULL) return def;
   #endif
   int x = atoi(in);
-  if(x < min || x > max) err("Config error: %s must be between %i and %i",
+  if(x < min || x > max) error("Config error: %s must be between %i and %i",
                        str,min,max);
   return x;
-};
+}
 
 int configopt_int_fatal(dfile_t *config,char *str, int min, int max) {
   int x = atoi(configopt_fatal(config,str));
-  if(x < min || x > max) err("Config error: %s must be between %i and %i",
+  if(x < min || x > max) error("Config error: %s must be between %i and %i",
                        str,min,max);
   return x;
-};
+}
 
 char *dconfig(char *buf, char *parameter, int n) {
   sprintf(buf,"D%i.%s",n,parameter);
   return buf;
-};
+}
 
 dfile_t *dfile_load(char *filename) {
-  char *data = load_file(filename);
+  char *data = rf_loadfile(filename);
   if(data == NULL) return NULL;
   dfile_t *d = dfile(data);
   dfile_strip_quotes(d);
-  #ifdef REDUCE_CONFIG_MEMORY
   dfile_shrink(d);
-  #endif
   free(data);
   return d; 
-};
+}
 
 void dfile_strip_quotes(dfile_t *d) {
   int x;
@@ -99,9 +98,9 @@ void dfile_strip_quotes(dfile_t *d) {
       c = d->v[x];
       while(*c != '"') c++;
       c[0] = 0;
-    };
-  };
-};
+    }
+  }
+}
 
 dfile_t *dfile(char *data) {
   /* allocate base structure */
@@ -128,12 +127,13 @@ dfile_t *dfile(char *data) {
         if(*cx == '"') { /* skip quoted string */
           cx++;
           while(cx[0] != '"') {
+            if(cx[1] == 0) error("Unterminated quote in config");
             if(cx == data + len) continue;
             cx++;
-          };
-        };
+          }
+        }
         cx++;
-      };
+      }
       cx[0] = 0; /* null end */
       cz = cx; /* rememeber end point */
       /* find starting point */
@@ -141,25 +141,27 @@ dfile_t *dfile(char *data) {
       while(is_whitespace(*cx) != 1) {
         if(*cx == '"') { /* skip quoted string */
           cx--;
+          if(cx < data) error("Unterminated quote in config");
           while(cx[0] != '"') {
+            if(cx == data) error("Unterminated quote in config");
             if(cx == data + len) continue;
             cx--;
-          };
-        };
+          }
+        }
         cx--;
         if(cx == data) { /* handle case of beginning of file */
           cx--;
           break;
-        };
-      };
+        }
+      }
       out->p[out->n] = cx + 1;
       out->n++;
       if(out->n == MAX_PARAMETERS) return out; /* out of space */
       c = cz;
-    };
-  };
+    }
+  }
   return out;
-};
+}
 
 /* reduce memory footprint */
 char *dfile_shrink(dfile_t *d) {
@@ -173,7 +175,7 @@ char *dfile_shrink(dfile_t *d) {
     ttl += strlen(d->p[x]);
     ttl += strlen(d->v[x]);
     ttl += 2; /* for null terminators */
-  };
+  }
   ttl++;
   /* move everything and update pointers */
   char *newdata = malloc(ttl); /* new storage */
@@ -187,82 +189,28 @@ char *dfile_shrink(dfile_t *d) {
     strcpy(c,d->v[x]);
     d->v[x] = c;
     c += (strlen(c) + 1);
-  };
+  }
   return newdata;
-};
+}
 
 
 inline int is_whitespace(char ch) {
   if(ch == 0 || ch == ' ' || ch == '\n') return 1;
   return 0;
-};
-
-char *brk_field(char *dst, int f, char *in) {
-  if(dst == NULL || in == NULL) return NULL;
-  char *start = in;
-  int x = 0;
-  if(f != 0) { /* not first field */
-    for(x=0;x<f;x++) {
-      while(start[0] != ',') {
-        start++;
-        if(start[0] == 0 && x < f) return NULL;
-      };
-      start++;
-    };
-  };
-  strcpy(dst,start);
-  /* just terminate the end */
-  char *end = dst;
-  end++;
-  while(end[0] != ',' && end[0] != 0) end++;
-  end[0] = 0;
-  return dst;
-};
-
-char *load_file(char *filename) {
-  FILE *fdesc;
-  if(filename == NULL) return NULL;
-  fdesc = fopen(filename, "r");
-  if(fdesc == NULL) return NULL;
-  fseek(fdesc, 0L, SEEK_END);
-  int flength = ftell(fdesc);
-  if(flength == -1) return NULL;
-  rewind(fdesc);
-  char *buf = malloc(sizeof(char) * ( flength + 1));
-  if(buf == NULL) return NULL; /* file too big for memory */
-  if(fread(buf,1,flength,fdesc) != flength) return NULL;
-  fclose(fdesc);
-  buf[flength] = 0;
-  return buf;
-};
+}
 
 char *value_by_parameter(char *str, dfile_t *d) {
   int x;
   for(x=0;x<d->n;x++) {
-    if(faststrcmp(str,d->p[x]) == 1) return d->v[x];
-  };
+    if(rf_strcmp(str,d->p[x]) == 1) return d->v[x];
+  }
   return NULL;
-};
+}
 
 void print_config(dfile_t *d) {
   printf("config list has %i parsed options:-------------\n",d->n);
   int x;
   for(x=0;x<d->n;x++) printf("p(arameter):%s v(alue):%s\n",d->p[x],d->v[x]);
   printf("----------end config\n");
-};
-
-int faststrcmp(char *a, char *b) {
-  int x = 0;
-  while(a[x] == b[x]) {
-    x++;
-    if(a[x] == 0 || b[x] == 0) {
-      if(a[x] == 0 && b[x] == 0) {
-        return 1;
-      } else {
-        return 0;
-      };
-    };
-  };
-  return 0;
-};
+}
 
