@@ -102,6 +102,8 @@ int serial_write(byte *str, int len) {
   /* determine mode */
   if(len == 4 && str[2] == 0x08) {
      txmode = 1;
+  } else if(len == 4 && str[2] == 0x00) {
+     txmode = 0;
   } else if(len == 5 && str[2] == 0x01) {
      txmode = 2;
   }
