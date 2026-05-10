@@ -6,7 +6,8 @@
 /************ SCOPE *********************************
   This object contains configuration file loading
   routines, all based around two symbols, the equals
-  sign and the double quote.
+  sign and the double quote. Whole-line comments are
+  ignored before PARAM=value parsing.
 ****************************************************/
 
 #define MAX_PARAMETERS 65535
@@ -32,6 +33,9 @@ char *load_file(char *filename);
 
 /* split up data into parameters and values */
 dfile_t *dfile(char *data);
+
+/* replace whole-line comments with whitespace before parsing */
+void dfile_strip_comments(char *data);
 
 /* reduce the data section and pointer arrays to reduce mem usage, returns
    pointer to new data to be freed later. */

@@ -1,7 +1,7 @@
 # compiler flags
 CFLAGS= -O2 -Wall
 OBJS= acquire.o error.o loadconfig.o useful.o aldlcomm.o aldldata.o consoleif.o remote.o datalogger.o mode4.o
-LIBS= -lpthread -lrt -lncurses
+LIBS= -lpthread -lrt -lncurses -lncursesw -lftdi1 -ltinfo
 
 # install configuration
 CONFIGDIR= /etc/aldl
@@ -46,7 +46,7 @@ install: aldl-ftdi aldl-dummy
 	@echo Install complete, see configs in $(CONFIGDIR) before running
 
 aldl-ftdi: main.c serio-ftdi.o config.h aldl-io.h aldl-types.h $(OBJS)
-	gcc $(CFLAGS) main.c -o aldl-ftdi $(OBJS) serio-ftdi.o $(LIBS) -lftdi1
+	gcc $(CFLAGS) main.c -o aldl-ftdi $(OBJS) serio-ftdi.o $(LIBS)
 	@echo
 	@echo '***************************************************'
 	@echo ' You must blacklist or rmmod the ftdi_sio driver!!'
@@ -57,10 +57,10 @@ aldl-ftdi: main.c serio-ftdi.o config.h aldl-io.h aldl-types.h $(OBJS)
 aldl-tty: main.c serio-tty.o config.h aldl-io.h aldl-types.h $(OBJS)
 	@echo 'The TTY serial driver is unfinished,'
 	@echo 'Using it will simply generate an error.'
-	gcc $(CFLAGS) $(LIBS) main.c -o aldl-tty $(OBJS) serio-tty.o
+	gcc $(CFLAGS) $(LIBS) main.c -o aldl-tty $(OBJS) serio-tty.o $(LIBS)
 
 aldl-dummy: main.c serio-dummy.o config.h aldl-io.h aldl-types.h $(OBJS)
-	gcc $(CFLAGS) $(LIBS) main.c -o aldl-dummy $(OBJS) serio-dummy.o
+	gcc $(CFLAGS) $(LIBS) main.c -o aldl-dummy $(OBJS) serio-dummy.o $(LIBS)
 
 useful.o: useful.c useful.h config.h aldl-types.h
 	gcc $(CFLAGS) -c useful.c -o useful.o

@@ -29,6 +29,9 @@ aldl_commdef_t *comm; /* comm specs */
 /* is a char whitespace ...? */
 inline int is_whitespace(char ch);
 
+/* strip whole-line comments before parsing PARAM=value pairs */
+void dfile_strip_comments(char *data);
+
 /* following functions use internally stored config and should never be
    exported ... */
 
@@ -371,11 +374,39 @@ char *dconfig(char *buf, char *parameter, int n) {
 dfile_t *dfile_load(char *filename) {
   char *data = load_file(filename);
   if(data == NULL) return NULL;
+  dfile_strip_comments(data);
   dfile_t *d = dfile(data);
   dfile_strip_quotes(d);
   dfile_shrink(d);
   free(data);
   return d; 
+}
+
+void dfile_strip_comments(char *data) {
+  char *c = data;
+  char *line = data;
+  char *first;
+
+  while(*line != 0) {
+    first = line;
+    while(*first == ' ' || *first == '\t' || *first == '\r') first++;
+
+    if(first[0] == '-' ||
+       first[0] == '.' ||
+       first[0] == '#' ||
+       first[0] == ';' ||
+       first[0] == '*' ||
+       (first[0] == '/' && first[1] == '*')) {
+      c = line;
+      while(*c != 0 && *c != '\n') {
+        *c = ' ';
+        c++;
+      }
+    }
+
+    while(*line != 0 && *line != '\n') line++;
+    if(*line == '\n') line++;
+  }
 }
 
 void dfile_strip_quotes(dfile_t *d) {
