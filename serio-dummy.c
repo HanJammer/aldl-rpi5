@@ -24,7 +24,7 @@
 unsigned char *databuff;
 char txmode;
 
-void gen_pkt();
+void gen_pkt(int len);
 
 /****************FUNCTIONS**************************************/
 
@@ -35,13 +35,15 @@ void serial_close() {
   return;
 }
 
-void gen_pkt() {
+void gen_pkt(int len) {
   int x;
+  if(len < 4) return;
+  if(len > ALDL_COMMBUFFER) len = ALDL_COMMBUFFER;
   databuff[0]=0xF4;
   databuff[1]=0x92;
   databuff[2]=0x01;
-  for(x=3;x<63;x++) databuff[x] = ( (byte)rand() % 256 ) - 1;
-  databuff[63] = checksum_generate(databuff,63);
+  for(x=3;x<len-1;x++) databuff[x] = ( (byte)rand() % 256 ) - 1;
+  databuff[len-1] = checksum_generate(databuff,len-1);
   #ifdef DUMMY_CORRUPTION_ENABLE
   /* insert random bullshit sometimes */
   if( ( (byte)rand() % 100 ) < DUMMY_CORRPUTION_RATE ) {
@@ -60,7 +62,7 @@ int serial_init(char *port) {
   printf("Serial dummy driver initialized!\n");
   #endif
   txmode=0;
-  databuff=malloc(64);
+  databuff=malloc(ALDL_COMMBUFFER);
   return 1;
 }
 
@@ -136,7 +138,7 @@ inline int serial_read(byte *str, int len) {
   } if(txmode == 3) { /* data send */
     usleep(SERIAL_BYTES_PER_MS * len * 1000); /* fake baud delay */
     txmode = 2;
-    gen_pkt();
+    gen_pkt(len);
     #ifdef SERIAL_VERBOSE
     printf("DUMMY MODE: Generated packet...\n");
     #endif

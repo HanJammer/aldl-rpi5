@@ -96,7 +96,7 @@ For the LB9 / ECM 1227165 / mask 6E work in this fork, see:
 config-examples/lb9.conf
 ```
 
-That file is generated from TunerPro 1227165 / 6E material and should be treated as an initial working definition, not final calibration gospel.
+That file is an initial working definition and **needs testing on a real ECM** before it should be trusted for vehicle monitoring or tuning decisions.
 
 ## Important datalogger note
 
@@ -163,7 +163,7 @@ For a config-only check:
 /usr/local/bin/aldl-dummy configtest
 ```
 
-The dummy backend is useful for validating build, config parsing, datalogging and service behavior before touching the real ECM.
+The dummy backend is useful for validating build, config parsing, datalogging and service behavior before touching the real ECM. It generates meaningless fake values and must not be used as a vehicle health or monitoring source.
 
 ## Running with FTDI / real ALDL cable
 
@@ -202,6 +202,8 @@ Daily CSV rotation can be handled by `logrotate` using `/var/log/aldl/*.csv`.
 
 ## LB9 / ECM 1227165 / mask 6E notes
 
+Status: **draft / needs real ECM testing**.
+
 This fork includes early work toward a proper LB9 / 1227165 / 6E config:
 
 ```text
@@ -210,7 +212,6 @@ config-examples/lb9.conf
 
 Current status:
 
-- generated from `1227165_6E.adx`,
 - packet base follows existing `6E.conf`,
 - includes common live values like RPM, TPS, coolant temp, battery voltage, speed, MAF, LV8, O2, BLM, INT, BPW, spark and knock retard,
 - skips AutoProm-only channels outside the ECM packet,

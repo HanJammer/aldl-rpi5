@@ -4,3 +4,17 @@
 aldl-ftdi
 aldl-tty
 aldl-dummy
+
+# Local calibration and datastream definition inputs.
+# Keep generated configs in git; keep raw tool exports out of the repository.
+tunerpro/
+*.adx
+*.ads
+*.xdf
+
+# Local build artifacts
+*.o
+aldl-ftdi
+aldl-dummy
+aldl-tty
+aldl
