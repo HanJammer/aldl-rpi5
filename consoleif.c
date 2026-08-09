@@ -207,10 +207,10 @@ void draw_statusbar() {
                             aldl->stats->packetrecvtimeout;
   unlock_stats();
   if(w_width < 40) { /* small statusbar */
-    mvprintw(w_height - 1,0,"%u R=%.1f ERR=%u  ",
+    mvprintw(w_height - 1,0,"%lu R=%.1f ERR=%u  ",
              rec->t / 1000, pps, failcounter);
   } else { /* lg statusbar */
-    mvprintw(w_height - 1,1,"%s  TIMESTAMP: %i  PKT/S: %.1f  FAILED: %u  ",
+    mvprintw(w_height - 1,1,"%s  TIMESTAMP: %lu  PKT/S: %.1f  FAILED: %u  ",
              VERSION, rec->t, pps, failcounter);
   }
 }
@@ -493,4 +493,3 @@ void consoleif_handle_input() {
     /* do stuff here */
   }
 }
-

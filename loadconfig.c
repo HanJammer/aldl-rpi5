@@ -417,7 +417,7 @@ void dfile_strip_quotes(dfile_t *d) {
       d->v[x]++;
       c = d->v[x];
       while(*c != '"') {
-         if(*c == EOF) {
+         if(*c == 0 || *c == '\n') {
            error(1,ERROR_CONFIG,"Unterminated quote in config file");
          }
          c++;

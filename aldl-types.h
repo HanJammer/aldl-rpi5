@@ -106,7 +106,7 @@ typedef struct aldl_packetdef {
 
 typedef struct aldl_commdef {
   /* ------- config stuff ---------------- */
-  int checksum_enable:1;   /* set to 1 to enable checksum verification */
+  unsigned int checksum_enable:1; /* 1 enables checksum verification */
   byte pcm_address;        /* the address byte of the PCM */
   /* ------- idle traffic stuff ---------- */
   int chatterwait;         /* 1 enables chatter checking.  if set, it'll wait

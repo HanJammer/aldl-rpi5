@@ -61,10 +61,12 @@ inline void ftdi_recovery();
 /****************FUNCTIONS**************************************/
 
 void serial_close() {
-  if(ftdistatus > 0) {
-    ftdi_usb_close(ftdi);
+  if(ftdi != NULL) {
+    if(ftdistatus > 0) ftdi_usb_close(ftdi);
     ftdi_free(ftdi);
+    ftdi = NULL;
   }
+  ftdistatus = 0;
 }
 
 int serial_init(char *port) {
@@ -112,21 +114,21 @@ int serial_init(char *port) {
 }
 
 void serial_purge() {
-  ftdierror_counter(88,ftdi_usb_purge_buffers(ftdi));
+  ftdierror_counter(88,ftdi_tcioflush(ftdi));
   #ifdef SERIAL_VERBOSE
   printf("SERIAL PURGE RX/TX\n");
   #endif
 }
 
 void serial_purge_rx() {
-  ftdierror_counter(88,ftdi_usb_purge_rx_buffer(ftdi));
+  ftdierror_counter(88,ftdi_tciflush(ftdi));
   #ifdef SERIAL_VERBOSE
   printf("SERIAL PURGE RX\n");
   #endif
 }
 
 void serial_purge_tx() {
-  ftdierror_counter(88,ftdi_usb_purge_tx_buffer(ftdi));
+  ftdierror_counter(88,ftdi_tcoflush(ftdi));
   #ifdef SERIAL_VERBOSE
   printf("SERIAL PURGE TX\n");
   #endif
@@ -213,7 +215,6 @@ inline int ftdierror_counter(int loc,int errno) {
 
 inline void ftdi_recovery() {
   #ifdef FTDI_ATTEMPT_RECOVERY
-  ftdistatus=0;
     #ifdef SERIAL_VERBOSE
     fprintf(stderr,"FTDI DRIVER: Triggered recovery mode...\n");
     #endif
@@ -234,7 +235,7 @@ void serial_soft_recovery() {
 
 void serial_hard_recovery() {
   #ifdef FTDI_ATTEMPT_RECOVERY
-  ftdistatus = 0;
+  int reset_result;
   #ifdef SERIAL_VERBOSE
   fprintf(stderr,"FTDI DRIVER: Triggered hard recovery (usb reset)...\n");
   #endif
@@ -242,7 +243,11 @@ void serial_hard_recovery() {
      clears more chip state than a plain reopen, though a wedge sustained
      by aldl line backfeed may survive anything short of a long power
      cycle -- see the watchdog notes in config.h. */
-  ftdi_usb_reset(ftdi);
+  reset_result = ftdi_usb_reset(ftdi);
+  if(reset_result < 0) {
+    error(ENOTICE,ERROR_FTDI,"usb reset failed: %s",
+          ftdi_get_error_string(ftdi));
+  }
   serial_close();
   msleep(FTDI_HARD_RECOVERY_DELAY);
   serial_init(serialstr);

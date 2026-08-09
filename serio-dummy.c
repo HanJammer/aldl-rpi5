@@ -31,7 +31,8 @@ char txmode;
 /* nonzero = pretend to be a wedged adaptor: all i/o calls still succeed
    but no data ever arrives.  toggled by SIGUSR1 at runtime, for bench
    testing the acquisition watchdog without a car. */
-char dummy_silent;
+volatile sig_atomic_t dummy_silent;
+char dummy_silent_reported;
 
 /* rx freshness tracking for serial_ms_since_rx() */
 timespec_t last_rx;
@@ -45,9 +46,8 @@ static int dummy_read(byte *str, int len);
    2026-08-08 road test: the 'wire' goes completely quiet but the device
    is still there and every call succeeds. */
 void dummy_toggle_silence(int signum) {
+  (void)signum;
   dummy_silent = !dummy_silent;
-  fprintf(stderr,"DUMMY DRIVER: silence mode %s\n",
-          dummy_silent ? "ON (wire dead)" : "OFF (wire alive)");
 }
 
 /****************FUNCTIONS**************************************/
@@ -88,6 +88,7 @@ int serial_init(char *port) {
   txmode=0;
   lastwrite_len=0;
   dummy_silent=0;
+  dummy_silent_reported=0;
   signal(SIGUSR1,dummy_toggle_silence);
   memset(lastwrite,0,sizeof(lastwrite));
   databuff=malloc(ALDL_COMMBUFFER);
@@ -136,6 +137,11 @@ int serial_write(byte *str, int len) {
 
 int serial_read(byte *str, int len) {
   int resp;
+  if(dummy_silent_reported != (dummy_silent != 0)) {
+    dummy_silent_reported = (dummy_silent != 0);
+    fprintf(stderr,"DUMMY DRIVER: silence mode %s\n",
+            dummy_silent_reported ? "ON (wire dead)" : "OFF (wire alive)");
+  }
   if(dummy_silent == 1) { /* wedged adaptor: succeed with no data, ever */
     usleep(SLEEPYTIME);
     return 0;

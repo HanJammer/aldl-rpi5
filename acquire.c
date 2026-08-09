@@ -32,9 +32,10 @@ void *aldl_acq(void *aldl_in) {
   int pktfail = 0; /* marker for a failed packet in event loop */
   int npkt = 0; /* array index of packet to operate on */
   int buffered = 0;
-  int serialdowntime = 0;
   #ifdef SERIAL_WATCHDOG
   int wd_level = 0; /* current watchdog escalation level, 0 = all good */
+  int wd_armed = 0; /* only after the first validated packet */
+  timespec_t wd_lastgood = get_time(); /* time of last validated packet */
   timespec_t wd_lastaction = get_time(); /* time of last recovery action */
   #endif
   #ifdef WATCHDOG_STATS
@@ -81,12 +82,17 @@ void *aldl_acq(void *aldl_in) {
        which systemd forwards to the journal, so every road test leaves a
        usable trace without a debugger attached. */
     if(get_elapsed_ms(statstamp) >= WATCHDOG_STATS_MS) {
+      unsigned long packetquiet = 0;
+      #ifdef SERIAL_WATCHDOG
+      if(wd_armed != 0) packetquiet = get_elapsed_ms(wd_lastgood);
+      #endif
       lock_stats();
       error(ENOTICE,ERROR_TIMING,
-         "stats: pps=%.2f timeouts=%i headerfail=%i cksumfail=%i quiet=%lums",
+         "stats: pps=%.2f timeouts=%i headerfail=%i cksumfail=%i "
+         "packetquiet=%lums rxquiet=%lums",
          aldl->stats->packetspersecond,aldl->stats->packetrecvtimeout,
          aldl->stats->packetheaderfail,aldl->stats->packetchecksumfail,
-         serial_ms_since_rx());
+         packetquiet,serial_ms_since_rx());
       unlock_stats();
       statstamp = get_time();
     }
@@ -120,15 +126,7 @@ void *aldl_acq(void *aldl_in) {
     if(serial_get_status() != 1) {
       set_connstate(ALDL_SERIALERROR,aldl);
       while (serial_get_status() != 1) {
-        /* keep track of how long we're down, since we're outside of lagcheck
-           loop. */
         msleep(250);
-        serialdowntime += 250;
-      }
-      /* assume comm ok */
-      if(aldl->comm->shutup_time > 0 &&
-         serialdowntime < aldl->comm->shutup_time) {
-        set_connstate(ALDL_CONNECTED,aldl);
       }
     }
 
@@ -136,7 +134,6 @@ void *aldl_acq(void *aldl_in) {
        drops, or if it never existed ... if not, time for a delay */
     if(get_connstate(aldl) >= 10) { /* if in any sort of disconnected state */
       aldl_reconnect(comm); /* main connection happens here */
-      set_connstate(ALDL_CONNECTED,aldl);
     #ifndef AGGRESSIVE
     } else {
       /* delay between data collection iterations */
@@ -245,12 +242,13 @@ void *aldl_acq(void *aldl_in) {
          too long despite active polling, escalate recovery.  this covers
          the case where the adaptor is wedged but still enumerates, so
          reads 'succeed' with zero bytes forever and the io error counter
-         in the serial driver never trips.  serial_ms_since_rx() returns 0
-         until the first byte ever arrives, so this stays disarmed while
-         waiting for the car to be keyed on.  it is NOT reset by recovery
-         actions, only by actual data, so the ladder keeps climbing. */
+         in the serial driver never trips.  use the last validated packet,
+         not the last arbitrary byte: request echo or line noise must not
+         make a dead ECM look healthy.  the watchdog stays disarmed until
+         the first good packet and is not reset by recovery actions. */
       {
-        unsigned long quiet = serial_ms_since_rx();
+        unsigned long quiet = 0;
+        if(wd_armed != 0) quiet = get_elapsed_ms(wd_lastgood);
         if(quiet >= WATCHDOG_DEAD_MS) {
           if(wd_level < 3 ||
              get_elapsed_ms(wd_lastaction) >= WATCHDOG_DEAD_RETRY_MS) {
@@ -291,8 +289,13 @@ void *aldl_acq(void *aldl_in) {
       pktcounter++; /* increment packet counter */
       #endif
       #ifdef SERIAL_WATCHDOG
-      wd_level = 0; /* real data arrived, watchdog back to level zero */
+      wd_lastgood = get_time();
+      wd_armed = 1;
+      wd_level = 0; /* validated data arrived, watchdog back to level zero */
       #endif
+      if(get_connstate(aldl) != ALDL_CONNECTED) {
+        set_connstate(ALDL_CONNECTED,aldl);
+      }
       lock_stats();
       aldl->stats->failcounter = 0; /* reset failcounter */
       unlock_stats();
@@ -326,4 +329,3 @@ void *aldl_acq(void *aldl_in) {
   }
   return NULL;
 }
-
