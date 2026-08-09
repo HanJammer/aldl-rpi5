@@ -284,6 +284,29 @@ Current status:
 - skips AutoProm-only channels outside the ECM packet,
 - keeps some unsupported ADX conversions as raw values where ALDL-IO cannot express lookup tables or reciprocal equations.
 
+### L98 and Corvette applicability
+
+The TunerPro definition catalog lists ECM `1227165`, mask `$6E`, for both the
+1989 LB9 and L98 in F-body and Y-body applications. Consequently, the
+successful 1227165/$6E road test validates not only the LB9 transport and
+decoder path but also the same datastream family used by the 1989 L98
+Corvette. The repository definition is therefore expected to work for that
+ECM/mask combination, subject to normal vehicle verification before relying
+on it for tuning or alarms.
+
+The later 1990–1991 LB9/L98 application uses mask `$8D`, commonly associated
+with ECM `1227730`; the Corvette installation is also documented with the
+weatherproof `1227727`, which is the closely related under-hood hardware
+variant. ALDL-IO's 8192-baud transport and the fixes validated here should be
+applicable to that family, but `lb9.conf` is a `$6E` definition and must not be
+used unchanged with `$8D`. Supporting those Corvettes requires a separate
+verified `$8D` packet/field definition, for example derived from the published
+`8D_90-91_Corvette.adx` reference.
+
+Reference: [TunerPro GM definition catalog](https://www.tunerpro.net/downloadBinDefs.htm)
+lists `$6E / 1227165` for 1989 LB9/L98 F & Y body and `$8D / 1227730` for
+1990–1991 LB9/L98 Y & F body.
+
 Known limitations:
 
 - ALDL-IO only supports simple linear conversions: `X * multiplier + adder`;
