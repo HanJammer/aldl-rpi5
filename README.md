@@ -96,7 +96,10 @@ For the LB9 / ECM 1227165 / mask 6E work in this fork, see:
 config-examples/lb9.conf
 ```
 
-That file is an initial working definition and **needs testing on a real ECM** before it should be trusted for vehicle monitoring or tuning decisions.
+That definition has now been checked field-by-field against the reference ADX,
+compared with the active Raspberry Pi configuration, and exercised against a
+real ECM 1227165 / mask 6E during a road test. See the LB9 status section below
+for the remaining interpretation and hardware caveats.
 
 ## Important datalogger note
 
@@ -183,6 +186,66 @@ debian-config.sh
 
 Review it before use. Do not run random driver-changing scripts blindly on a car computer. Computers are serious tools.
 
+## Reliability fixes after the 2026-08 road test
+
+The first extended vehicle test exposed a failure mode where the FT232RL still
+enumerated over USB and the `aldl-ftdi` process remained alive, but the ALDL
+wire went silent and CSV logging stopped. The original recovery counter only
+reacted to negative USB errors; successful zero-byte reads could therefore
+loop forever.
+
+This fork now includes:
+
+- a packet-freshness watchdog, armed only after the first valid ECM frame;
+- staged recovery: device reopen after 5 seconds, USB reset after 15 seconds,
+  and an explicit dead-link report after 60 seconds with a bounded retry rate;
+- once-per-minute communication statistics on stderr for systemd journal
+  evidence;
+- recovery timing based on the last header-and-checksum-validated packet,
+  rather than any byte or request echo;
+- truthful connection state: `Reconnected` is reported only after a valid
+  packet arrives;
+- a `SIGUSR1` silence mode in `aldl-dummy` for repeatable watchdog tests;
+- a real close/free/reopen of the libftdi context during recovery;
+- working checksum enforcement. A legacy signed one-bit field stored enabled
+  as `-1`, so the old `checksum_enable == 1` test never ran; the field is now
+  unsigned and the path is covered by intentional dummy-frame corruption;
+- `MINMAX=0` in the example main config so the logger preserves converted raw
+  values instead of silently clamping suspicious measurements into range.
+
+Bench verification on Raspberry Pi 5 confirmed watchdog actions at about
+5/15/60 seconds, automatic logging recovery after simulated silence, no L1
+recovery during a 3.4-second simulated cranking gap, active checksum-failure
+counting, and a clean `-Wall` build.
+
+The installed `/etc/aldl/aldl.conf` is not overwritten by `make install`.
+Existing installations should review and deliberately set `MINMAX=0` if raw,
+unclamped datalogging is desired.
+
+## Current FT232RL freeze hypothesis
+
+The leading hardware hypothesis is a partial brownout / dirty power-on reset
+of the FT232RL, assisted by backfeed from the live single-wire ALDL M line into
+the adapter I/O/VCCIO domain. In that state USB can remain enumerated while the
+UART side is wedged, and the transmitter may hold the shared line in a
+dominant state. The road-test freezes coincided with Raspberry Pi undervoltage
+events, but similar historical failures on different notebooks and different
+FT232RL adapters indicate that poor Pi power is at most one trigger, not the
+complete root cause.
+
+This is a strong evidence-based hypothesis, not a confirmed circuit diagnosis.
+Planned hardware validation includes measuring the M-line pull-up and backfeed
+current, observing VCCIO and line level during the fault, testing
+`ftdi_usb_reset()`, and comparing controlled USB VBUS-off intervals with
+ignition on and off. Long port-power cycling will not be automated until the
+physical Raspberry Pi USB port and actual VBUS switching behavior are proven.
+
+An improved adapter is expected to remove the backfeed path and guarantee a
+clean reset when USB power disappears, most likely with a VBUS-powered
+transistor/open-collector interface or an equivalent isolated design. The
+final schematic, component values, measurements, and validation results will
+be published in this repository after the hardware tests are complete.
+
 ## Optional systemd service
 
 For unattended datalogging, run `aldl-dummy` or `aldl-ftdi` as a service and keep screen/ncurses output out of log files.
@@ -202,9 +265,9 @@ Daily CSV rotation can be handled by `logrotate` using `/var/log/aldl/*.csv`.
 
 ## LB9 / ECM 1227165 / mask 6E notes
 
-Status: **draft / needs real ECM testing**.
+Status: **road-tested definition; reliability and data-quality integration still in progress**.
 
-This fork includes early work toward a proper LB9 / 1227165 / 6E config:
+This fork includes a field-validated LB9 / 1227165 / 6E config:
 
 ```text
 config-examples/lb9.conf
@@ -212,7 +275,11 @@ config-examples/lb9.conf
 
 Current status:
 
-- packet base follows existing `6E.conf`,
+- all 80 definitions were compared with the reference `1227165_6E.adx` for
+  offsets, sizes, multipliers, adders and bit positions;
+- the active Raspberry Pi `lb9.conf` matched the repository version;
+- approximately 6,200 road-test rows decoded into physically coherent values;
+- the live ECM confirmed a 67-byte response with length byte `0x95`;
 - includes common live values like RPM, TPS, coolant temp, battery voltage, speed, MAF, LV8, O2, BLM, INT, BPW, spark and knock retard,
 - skips AutoProm-only channels outside the ECM packet,
 - keeps some unsupported ADX conversions as raw values where ALDL-IO cannot express lookup tables or reciprocal equations.
@@ -222,7 +289,11 @@ Known limitations:
 - ALDL-IO only supports simple linear conversions: `X * multiplier + adder`;
 - lookup tables from ADX are not expressible in stock ALDL-IO config syntax;
 - reciprocal formulas such as target AFR are currently represented as raw values;
-- real ECM / FTDI testing is still required.
+- engine-off defaults, shutdown-window values, stale data and other contextual
+  states still need to be tagged by downstream consumers rather than presented
+  blindly as normal measurements;
+- the physical FT232RL freeze mechanism and long-power-cycle recovery still
+  require the hardware validation described above.
 
 ## License
 
