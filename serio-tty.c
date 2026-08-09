@@ -85,3 +85,15 @@ void serial_help_devs() {
 int serial_get_status() {
   return 0;
 }
+
+unsigned long serial_ms_since_rx() {
+  return 0; /* driver doesn't work yet, keep the watchdog disarmed */
+}
+
+void serial_soft_recovery() {
+  /* driver doesn't work yet */
+}
+
+void serial_hard_recovery() {
+  /* driver doesn't work yet */
+}

@@ -33,6 +33,13 @@ void *aldl_acq(void *aldl_in) {
   int npkt = 0; /* array index of packet to operate on */
   int buffered = 0;
   int serialdowntime = 0;
+  #ifdef SERIAL_WATCHDOG
+  int wd_level = 0; /* current watchdog escalation level, 0 = all good */
+  timespec_t wd_lastaction = get_time(); /* time of last recovery action */
+  #endif
+  #ifdef WATCHDOG_STATS
+  timespec_t statstamp = get_time(); /* time of last stats report */
+  #endif
   aldl->ready = 0;
 
   /* sanity checks */
@@ -68,6 +75,22 @@ void *aldl_acq(void *aldl_in) {
 
   /* loop infinitely until ALDL_QUIT is set */
   while(get_connstate(aldl) != ALDL_QUIT) {
+
+    #ifdef WATCHDOG_STATS
+    /* periodic one-line comms health report.  goes to stderr via error(),
+       which systemd forwards to the journal, so every road test leaves a
+       usable trace without a debugger attached. */
+    if(get_elapsed_ms(statstamp) >= WATCHDOG_STATS_MS) {
+      lock_stats();
+      error(ENOTICE,ERROR_TIMING,
+         "stats: pps=%.2f timeouts=%i headerfail=%i cksumfail=%i quiet=%lums",
+         aldl->stats->packetspersecond,aldl->stats->packetrecvtimeout,
+         aldl->stats->packetheaderfail,aldl->stats->packetchecksumfail,
+         serial_ms_since_rx());
+      unlock_stats();
+      statstamp = get_time();
+    }
+    #endif
 
     /* iterate through all packets */
     for(npkt=0;npkt < comm->n_packets;npkt++) {
@@ -217,6 +240,48 @@ void *aldl_acq(void *aldl_in) {
       }
       unlock_stats();
 
+      #ifdef SERIAL_WATCHDOG
+      /* watchdog for a silently dead line.  if the wire has been quiet for
+         too long despite active polling, escalate recovery.  this covers
+         the case where the adaptor is wedged but still enumerates, so
+         reads 'succeed' with zero bytes forever and the io error counter
+         in the serial driver never trips.  serial_ms_since_rx() returns 0
+         until the first byte ever arrives, so this stays disarmed while
+         waiting for the car to be keyed on.  it is NOT reset by recovery
+         actions, only by actual data, so the ladder keeps climbing. */
+      {
+        unsigned long quiet = serial_ms_since_rx();
+        if(quiet >= WATCHDOG_DEAD_MS) {
+          if(wd_level < 3 ||
+             get_elapsed_ms(wd_lastaction) >= WATCHDOG_DEAD_RETRY_MS) {
+            error(ENOTICE,ERROR_TIMING,
+              "watchdog: line dead for %lums despite polling; usb reset. "
+              "if this persists, power cycle the ecm and the usb adaptor "
+              "at the same time",quiet);
+            serial_hard_recovery();
+            wd_lastaction = get_time();
+            wd_level = 3;
+          }
+        } else if(quiet >= WATCHDOG_HARD_MS) {
+          if(wd_level < 2) {
+            error(ENOTICE,ERROR_TIMING,
+                  "watchdog: no data for %lums, trying usb reset",quiet);
+            serial_hard_recovery();
+            wd_lastaction = get_time();
+            wd_level = 2;
+          }
+        } else if(quiet >= WATCHDOG_SOFT_MS) {
+          if(wd_level < 1) {
+            error(ENOTICE,ERROR_TIMING,
+                  "watchdog: no data for %lums, reopening device",quiet);
+            serial_soft_recovery();
+            wd_lastaction = get_time();
+            wd_level = 1;
+          }
+        }
+      }
+      #endif
+
       pktfail = 0; /* reset fail state */
       goto PKTRETRY; /* jump back to earlier in the loop, no increment */
 
@@ -224,6 +289,9 @@ void *aldl_acq(void *aldl_in) {
     } else {
       #ifdef TRACK_PKTRATE
       pktcounter++; /* increment packet counter */
+      #endif
+      #ifdef SERIAL_WATCHDOG
+      wd_level = 0; /* real data arrived, watchdog back to level zero */
       #endif
       lock_stats();
       aldl->stats->failcounter = 0; /* reset failcounter */

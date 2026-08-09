@@ -157,6 +157,42 @@
 #define FTDI_ATTEMPT_RECOVERY
 #define FTDI_MAXFAIL 3
 
+/* ------- ACQUISITION WATCHDOG ----------------------*/
+
+/* detects a silently dead line: the adaptor still enumerates and reads
+   'succeed', but no data ever arrives, so the io failure counter in the
+   serial driver never trips (that one only counts hard usb errors).  seen
+   in the field as the ft232r wedge during the 2026-08-08 road test, where
+   the stream froze mid-drive while the process stayed alive.  the watchdog
+   measures time since the last received byte and escalates: reopen, then
+   usb reset, then a periodic reset with a loud complaint.  it never fakes
+   data, and drops back to level zero as soon as a good packet arrives. */
+#define SERIAL_WATCHDOG
+
+/* level 1: close and reopen the device.  the longest legitimate silence
+   observed on the wire is ~3.4s (engine cranking), so 5s is safe. */
+#define WATCHDOG_SOFT_MS 5000
+
+/* level 2: usb reset + reopen. */
+#define WATCHDOG_HARD_MS 15000
+
+/* level 3: the link is presumed dead.  complain to stderr and repeat the
+   usb reset every WATCHDOG_DEAD_RETRY_MS until data returns.  note that a
+   wedged adaptor that is being backfed from the aldl line may need its
+   usb port power cycled for tens of seconds, or a simultaneous power
+   cycle of both the ecm and the usb side -- see the road test review. */
+#define WATCHDOG_DEAD_MS 60000
+#define WATCHDOG_DEAD_RETRY_MS 60000
+
+/* periodic one-line comms health report to stderr, so a road test leaves
+   a usable trace in the journal without a debugger attached.  undef to
+   disable. */
+#define WATCHDOG_STATS
+#define WATCHDOG_STATS_MS 60000
+
+/* delay in ms between closing and reopening the device in hard recovery */
+#define FTDI_HARD_RECOVERY_DELAY 1000
+
 /* ------- DUMMY DRIVER CONFIG ----------------------*/
 
 /* simulate random corruption in dummy packets */

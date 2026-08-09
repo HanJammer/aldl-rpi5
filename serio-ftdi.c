@@ -35,6 +35,12 @@ int iofail;
 /* storage for serial init string */
 char *serialstr;
 
+/* timestamp of the last byte that actually arrived from the wire, and a
+   flag that it ever happened.  deliberately NOT reset by recovery, so the
+   watchdog escalation ladder keeps counting across reopen attempts. */
+timespec_t last_rx;
+byte last_rx_valid;
+
 /***************FUNCTION DEFS************************************/
 
 /* init the ftdi driver by a special port description:
@@ -158,6 +164,10 @@ int serial_read(byte *str, int len) {
   int resp = 0; /* to store response from whatever read */
   resp = ftdi_read_data(ftdi,(unsigned char *)str,len);
   ftdierror_counter(22,resp);
+  if(resp > 0) { /* the wire is actually alive */
+    last_rx = get_time();
+    last_rx_valid = 1;
+  }
   #ifdef SERIAL_SUPERVERBOSE
   if(resp > 0) {
     printf("READ %i of %i bytes: ",resp,len);
@@ -210,6 +220,33 @@ inline void ftdi_recovery() {
   serial_close();
   msleep(500);
   serial_init(serialstr);
+  #endif
+}
+
+unsigned long serial_ms_since_rx() {
+  if(last_rx_valid == 0) return 0; /* nothing ever arrived, stay disarmed */
+  return get_elapsed_ms(last_rx);
+}
+
+void serial_soft_recovery() {
+  ftdi_recovery();
+}
+
+void serial_hard_recovery() {
+  #ifdef FTDI_ATTEMPT_RECOVERY
+  ftdistatus = 0;
+  #ifdef SERIAL_VERBOSE
+  fprintf(stderr,"FTDI DRIVER: Triggered hard recovery (usb reset)...\n");
+  #endif
+  /* usb-level reset of the device while the handle is still open.  this
+     clears more chip state than a plain reopen, though a wedge sustained
+     by aldl line backfeed may survive anything short of a long power
+     cycle -- see the watchdog notes in config.h. */
+  ftdi_usb_reset(ftdi);
+  serial_close();
+  msleep(FTDI_HARD_RECOVERY_DELAY);
+  serial_init(serialstr);
+  serial_purge();
   #endif
 }
 

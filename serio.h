@@ -30,5 +30,19 @@ void serial_help_devs();
 /* get serial status 1=OK */
 int serial_get_status();
 
+/* milliseconds since a byte last actually arrived from the wire.  used by
+   the acquisition watchdog to detect a silently dead line, where reads
+   technically succeed but never return any data.  returns 0 until the
+   first byte ever arrives, so the watchdog stays disarmed while waiting
+   for the car to show up. */
+unsigned long serial_ms_since_rx();
+
+/* a gentle recovery: close and reopen the device. */
+void serial_soft_recovery();
+
+/* a heavier recovery: reset the usb device (if the driver supports that)
+   before reopening.  safe to call on a wedged-but-enumerated adaptor. */
+void serial_hard_recovery();
+
 #endif
 
